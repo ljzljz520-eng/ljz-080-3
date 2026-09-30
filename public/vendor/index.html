@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>摊主工作台 · 放心菜场</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div id="login-view" class="container narrow" style="display:none">
+  <div class="card" style="margin-top:40px">
+    <h2>🧑‍🌾 摊主登录</h2>
+    <label>摊位号（或预留手机号）</label>
+    <input id="account" placeholder="如 S001" value="S001">
+    <label>密码</label>
+    <input id="password" type="password" placeholder="演示密码 123456" value="123456">
+    <button class="btn block" style="margin-top:16px" onclick="login()">登 录</button>
+    <div style="text-align:center;margin-top:12px"><a href="/">← 返回平台首页</a></div>
+  </div>
+</div>
+
+<div id="app-view" style="display:none">
+  <div class="topbar">
+    <div class="brand"><span class="logo">🧑‍🌾</span> 摊主工作台</div>
+    <div><span class="who" id="who"></span><button onclick="logout()">退出</button></div>
+  </div>
+  <div class="container">
+    <div class="pill-tabs">
+      <button data-tab="batches" class="on" onclick="tab('batches')">我的批次</button>
+      <button data-tab="new" onclick="tab('new')">录入进货批次</button>
+    </div>
+    <div id="content"></div>
+  </div>
+</div>
+<script src="/assets/common.js"></script>
+<script>
+let me = null, batches = [], filter = 'all';
+
+async function init() {
+  const token = localStorage.getItem('mt_token');
+  if (!token) return showLogin();
+  try { me = await api('/api/vendor/me'); showApp(); }
+  catch { localStorage.removeItem('mt_token'); showLogin(); }
+}
+function showLogin() { document.getElementById('login-view').style.display = ''; }
+function showApp() {
+  document.getElementById('app-view').style.display = '';
+  document.getElementById('who').textContent = `${me.name}（${me.code}）`;
+  tab('batches');
+}
+async function login() {
+  const account = document.getElementById('account').value.trim();
+  const password = document.getElementById('password').value;
+  try {
+    const r = await api('/api/login', { method: 'POST', body: { role: 'vendor', account, password } });
+    localStorage.setItem('mt_token', r.token);
+    me = await api('/api/vendor/me');
+    showApp();
+  } catch (e) { toast(e.message, true); }
+}
+function tab(name) {
+  document.querySelectorAll('.pill-tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  name === 'new' ? renderNew() : loadBatches();
+}
+
+function expBadge(e) { return e ? `<span class="badge ${EXP_BADGE[e][0]}">${EXP_BADGE[e][1]}</span>` : ''; }
+
+async function loadBatches() {
+  batches = await api('/api/vendor/batches');
+  const filters = [['all', '全部'], ['on_sale', '在售'], ['near', '临期预警'], ['recalled', '召回/处理'], ['sold_out', '已售罄']];
+  let list = batches;
+  if (filter === 'near') list = batches.filter(b => ['near', 'expiring_today', 'expired'].includes(b.expiry_state) && b.status === 'on_sale');
+  else if (filter === 'recalled') list = batches.filter(b => ['recalled', 'handled', 'destroyed'].includes(b.status));
+  else if (filter !== 'all') list = batches.filter(b => b.status === filter);
+
+  document.getElementById('content').innerHTML = `
+    <div class="card">
+      <div class="pill-tabs" style="margin-bottom:10px">
+        ${filters.map(([k, t]) => `<button class="${filter === k ? 'on' : ''}" onclick="setFilter('${k}')">${t}</button>`).join('')}
+      </div>
+      ${list.length ? list.map(b => {
+        const sb = STATUS_BADGE[b.status];
+        return `<div class="item">
+          <div class="title">${esc(b.product_name)} ${b.variety ? '<span class="badge gray">' + esc(b.variety) + '</span>' : ''}
+            <span class="badge ${sb[0]}">${sb[1]}</span>${expBadge(b.expiry_state)}
+            ${b.fail_count > 0 ? '<span class="badge red">检测不合格×' + b.fail_count + '</span>' : ''}
+          </div>
+          <div class="meta">溯源码 ${esc(b.trace_code)} · 产地 ${esc(b.origin_place)} · 进货 ${esc(b.purchase_time)}</div>
+          <div class="meta">剩余库存：<b>${b.remaining}</b> ${esc(b.unit)} / 进货 ${b.quantity} ${esc(b.unit)} · 检测 ${b.detection_count} 条${b.best_before ? ' · 保质期至 ' + esc(b.best_before) : ''}</div>
+          <div class="actions">
+            <button class="btn sm" onclick="openBatch(${b.id})">批次管理</button>
+          </div>
+        </div>`; }).join('') : '<div class="empty">该分类下暂无批次</div>'}
+    </div>`;
+}
+function setFilter(f) { filter = f; loadBatches(); }
+
+function renderNew() {
+  document.getElementById('content').innerHTML = `
+  <div class="card">
+    <h2>📦 录入今日进货批次</h2>
+    <label>商品名称 *</label><input id="f-product" placeholder="如：上海青">
+    <div class="row2">
+      <div><label>品种/规格</label><input id="f-variety" placeholder="如：矮脚青 / 85#大果"></div>
+      <div><label>数量 *</label><input id="f-qty" type="number" step="0.01" placeholder="如：80"></div>
+    </div>
+    <label>单位 *</label>
+    <select id="f-unit"><option>公斤</option><option>斤</option><option>箱</option><option>份</option><option>尾</option></select>
+    <label>来源类型 *</label>
+    <select id="f-otype">
+      <option value="base">自有基地直供</option><option value="farm">农户直收</option>
+      <option value="wholesale">批发市场采购</option><option value="supplier">供应商配送</option>
+    </select>
+    <label>产地/来源地 *</label><input id="f-place" placeholder="如：本市崇明绿色蔬菜基地">
+    <div class="row2"><div><label>供货方</label><input id="f-supplier" placeholder="合作社/批发行名称（内部信息）"></div>
+    <div><label>供货方联系方式</label><input id="f-scontact" placeholder="仅管理员可见"></div></div>
+    <div class="row2"><div><label>进货时间 *</label><input id="f-ptime" type="datetime-local"></div>
+    <div><label>到货时间</label><input id="f-atime" type="datetime-local"></div></div>
+    <label>保质期至（临期判定依据）</label><input id="f-before" type="date">
+    <button class="btn block" style="margin-top:16px" onclick="submitBatch()">提交批次并生成溯源码</button>
+  </div>`;
+  document.getElementById('f-ptime').value = nowStr();
+}
+async function submitBatch() {
+  const val = id => document.getElementById(id).value.trim();
+  const body = {
+    product_name: val('f-product'), variety: val('f-variety'),
+    quantity: val('f-qty'), unit: val('f-unit'),
+    origin_type: val('f-otype'), origin_place: val('f-place'),
+    supplier: val('f-supplier'), supplier_contact: val('f-scontact'),
+    purchase_time: val('f-ptime').replace('T', ' '),
+    arrival_time: val('f-atime') ? val('f-atime').replace('T', ' ') : '',
+    best_before: val('f-before')
+  };
+  try {
+    const r = await api('/api/vendor/batches', { method: 'POST', body });
+    toast('批次已录入，溯源码：' + r.trace_code);
+    filter = 'all'; tab('batches');
+    setTimeout(() => openBatch(r.id), 300);
+  } catch (e) { toast(e.message, true); }
+}
+
+async function openBatch(id) {
+  const d = await api('/api/vendor/batch/' + id);
+  const b = d.batch;
+  const sb = STATUS_BADGE[b.status];
+  document.getElementById('content').innerHTML = `
+    <div class="back-link" onclick="loadBatches()">← 返回批次列表</div>
+    <div class="card">
+      <h2>${esc(b.product_name)} <span class="badge ${sb[0]}">${sb[1]}</span> ${expBadge(b.expiry_state)}</h2>
+      <dl class="kv">
+        <dt>溯源码</dt><dd>${esc(b.trace_code)}</dd>
+        <dt>产地来源</dt><dd>${esc(ORIGIN_TEXT[b.origin_type])} · ${esc(b.origin_place)}</dd>
+        <dt>供货方</dt><dd>${esc(b.supplier || '—')} ${b.supplier_contact ? '（' + esc(b.supplier_contact) + '）' : ''}</dd>
+        <dt>进货</dt><dd>${b.quantity} ${esc(b.unit)} · ${esc(b.purchase_time)}</dd>
+        <dt>保质期至</dt><dd>${esc(b.best_before || '未设置')}</dd>
+        <dt>当前剩余</dt><dd><b>${b.remaining}</b> ${esc(b.unit)}</dd>
+      </dl>
+      <div class="actions">
+        <button class="btn" onclick="showQR(${b.id})">📱 批次溯源二维码</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>🧪 检测结果（${d.detections.length}）</h2>
+      ${d.detections.map(x => `<div class="item">
+        <div class="title">${esc(x.item)} <span class="badge ${RESULT_BADGE[x.result][0]}">${RESULT_BADGE[x.result][1]}</span></div>
+        <div class="meta">${esc(x.tested_by)} · ${esc(x.tested_at)}${x.method ? ' · ' + esc(x.method) : ''}</div>
+      </div>`).join('') || '<div class="empty">暂无检测记录</div>'}
+      <h3>➕ 录入检测结果</h3>
+      <div class="row2"><div><label>检测项目</label><input id="d-item" placeholder="如：有机磷农药残留"></div>
+      <div><label>检测结果</label><select id="d-result"><option value="pass">合格</option><option value="fail">不合格</option><option value="pending">待检测</option></select></div></div>
+      <div class="row2"><div><label>检测人/机构</label><input id="d-by" value="市场快检室"></div>
+      <div><label>检测时间</label><input id="d-at" type="datetime-local"></div></div>
+      <label>检测方式/备注</label><input id="d-method" placeholder="如：酶抑制率法">
+      <button class="btn block" style="margin-top:10px" onclick="addDetection(${b.id})">提交检测结果</button>
+      <div class="scan-tip" style="color:var(--amber)">⚠️ 一旦录入“不合格”，该批次将自动召回下架并从消费者端隐藏。</div>
+    </div>
+
+    <div class="card">
+      <h2>📊 每日库存盘点</h2>
+      ${d.logs.slice(0, 6).map(l => `<div class="item" style="padding:8px 12px">
+        <div class="meta">${esc(l.logged_at)} · 剩余 <b>${l.remaining}</b> · 售出 ${l.sold} · 报损 ${l.discarded}${l.note ? ' · ' + esc(l.note) : ''}</div>
+      </div>`).join('')}
+      <h3>➕ 更新剩余库存</h3>
+      <div class="row2"><div><label>当前剩余 *</label><input id="i-rem" type="number" step="0.01" value="${b.remaining}"></div>
+      <div><label>其中报损数量</label><input id="i-dis" type="number" step="0.01" value="0"></div></div>
+      <label>备注</label><input id="i-note" placeholder="如：傍晚盘点">
+      <button class="btn block" style="margin-top:10px" onclick="addInventory(${b.id})">提交盘点</button>
+    </div>
+
+    <div class="card">
+      <h2>🏷️ 临期处理（${d.handlings.length}）</h2>
+      ${d.handlings.map(h => `<div class="item">
+        <div class="title">${esc(HANDLE_TEXT[h.type] || h.type)} <span class="badge blue">${h.quantity} ${esc(b.unit)}</span></div>
+        <div class="meta">${esc(h.handled_at)}${h.note ? ' · ' + esc(h.note) : ''}</div>
+      </div>`).join('') || '<div class="empty">暂无处理记录</div>'}
+      <h3>➕ 登记临期处理</h3>
+      <div class="row2"><div><label>处理方式</label>
+        <select id="h-type"><option value="discount">折价促销（继续在售）</option>
+        <option value="discount_done">折价售完（批次完结）</option>
+        <option value="discard">丢弃/报损（批次完结）</option>
+        <option value="destroy">无害化销毁</option></select></div>
+      <div><label>数量</label><input id="h-qty" type="number" step="0.01" value="0"></div></div>
+      <label>处理时间</label><input id="h-at" type="datetime-local">
+      <label>说明（折扣力度 / 去向等，会向消费者公示）</label><input id="h-note" placeholder="如：6元/斤 → 3.5元/斤，当日清完">
+      <button class="btn amber block" style="margin-top:10px" onclick="addHandling(${b.id})">提交处理记录</button>
+    </div>`;
+  document.getElementById('d-at').value = nowStr();
+  document.getElementById('h-at').value = nowStr();
+}
+
+async function addDetection(id) {
+  const body = { item: v('d-item'), result: v('d-result'), tested_by: v('d-by'),
+    tested_at: v('d-at').replace('T', ' '), method: v('d-method') };
+  if (!body.item || !body.tested_by) return toast('请填写检测项目和检测人', true);
+  try { await api(`/api/vendor/batch/${id}/detection`, { method: 'POST', body }); toast('检测结果已录入'); openBatch(id); }
+  catch (e) { toast(e.message, true); }
+}
+async function addInventory(id) {
+  const remaining = Number(v('i-rem'));
+  if (isNaN(remaining) || remaining < 0) return toast('请输入正确的剩余库存', true);
+  try { await api(`/api/vendor/batch/${id}/inventory`, { method: 'POST',
+    body: { remaining, discarded: v('i-dis') || 0, note: v('i-note') } });
+    toast('盘点已提交'); openBatch(id);
+  } catch (e) { toast(e.message, true); }
+}
+async function addHandling(id) {
+  const body = { type: v('h-type'), quantity: Number(v('h-qty')),
+    handled_at: v('h-at').replace('T', ' '), note: v('h-note') };
+  if (!(body.quantity >= 0)) return toast('请填写数量', true);
+  try { await api(`/api/vendor/batch/${id}/handling`, { method: 'POST', body }); toast('临期处理已登记'); openBatch(id); }
+  catch (e) { toast(e.message, true); }
+}
+function v(id) { return document.getElementById(id).value.trim(); }
+
+async function showQR(id) {
+  const r = await api(`/api/vendor/batch/${id}/qrcode`);
+  // 弹窗式卡片
+  let mask = document.getElementById('qr-mask');
+  if (!mask) { mask = document.createElement('div'); mask.id = 'qr-mask';
+    mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px';
+    document.body.appendChild(mask); mask.onclick = e => { if (e.target === mask) mask.style.display = 'none'; }; }
+  mask.innerHTML = `<div class="card qr-box" style="max-width:340px;width:100%;margin:0">
+    <h2>📱 批次溯源二维码</h2>
+    <img src="${r.dataUrl}" alt="溯源二维码">
+    <div class="meta" style="margin:8px 0;font-size:12px;color:var(--muted);word-break:break-all">${esc(r.url)}</div>
+    <div style="display:flex;gap:8px"><button class="btn ghost sm block" onclick="document.getElementById('qr-mask').style.display='none'">关闭</button>
+    <a class="btn sm" style="flex:1" href="${r.url}" target="_blank">打开溯源页</a></div>
+    <div class="scan-tip">打印后贴在价签/小票上，消费者和管理员扫码即达</div>
+  </div>`;
+  mask.style.display = 'flex';
+}
+init();
+</script>
+</body>
+</html>

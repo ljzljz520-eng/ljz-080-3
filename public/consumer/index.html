@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>消费者查溯源 · 放心菜场</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand"><span class="logo">🛒</span> 消费者查溯源 <span class="sub">放心菜场</span></div>
+  <a href="/" style="color:#fff;font-size:12px">返回首页</a>
+</div>
+<div class="container">
+  <div class="card">
+    <h2>🔍 查找摊位</h2>
+    <div class="searchbar">
+      <input id="q" placeholder="输入摊位名 / 品类 / 摊位号，如：蔬菜、S001、老李">
+      <button class="btn" onclick="search()">搜索</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>🧾 按溯源码查询</h2>
+    <div class="searchbar">
+      <input id="code" placeholder="输入批次溯源码，如 PC20260930A001">
+      <button class="btn ghost" onclick="goTrace()">查询</button>
+    </div>
+    <div class="scan-tip" style="margin-top:8px">扫描摊位小票或价签上的批次二维码，也可以直接打开溯源页。</div>
+  </div>
+
+  <div id="stalls"></div>
+
+  <div class="safe-notice">
+    <span>🔒</span>
+    <div>消费者端仅公示<b>商品来源、检测结果、临期处理</b>等信息。摊主联系方式、进货价格、库存流水、巡检整改等后台信息不会在此展示。</div>
+  </div>
+</div>
+<div class="footer-note">扫码买菜 · 来源可查 · 安心消费</div>
+<script src="/assets/common.js"></script>
+<script>
+async function search() {
+  const q = document.getElementById('q').value;
+  const rows = await api('/api/public/stalls?q=' + encodeURIComponent(q));
+  const box = document.getElementById('stalls');
+  if (!rows.length) { box.innerHTML = '<div class="card"><div class="empty">没有找到匹配的摊位</div></div>'; return; }
+  box.innerHTML = '<div class="card"><h2>🏪 搜索结果（' + rows.length + '）</h2>' + rows.map(s => `
+    <div class="item">
+      <div class="title">${esc(s.name)} <span class="badge green">${esc(s.category)}</span></div>
+      <div class="meta">📍 ${esc(s.location || '—')}　🕒 ${esc(s.business_hours || '—')}　编号 ${esc(s.code)}</div>
+      <div class="actions"><a class="btn sm" href="/consumer/stall.html?code=${s.code}">查看在售商品来源</a></div>
+    </div>`).join('') + '</div>';
+}
+function goTrace() {
+  const code = document.getElementById('code').value.trim();
+  if (!code) return toast('请输入溯源码', true);
+  location.href = '/t/' + encodeURIComponent(code);
+}
+document.getElementById('q').addEventListener('keydown', e => e.key === 'Enter' && search());
+document.getElementById('code').addEventListener('keydown', e => e.key === 'Enter' && goTrace());
+search();
+</script>
+</body>
+</html>

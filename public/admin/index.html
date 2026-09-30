@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理员巡检 · 放心菜场</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div id="login-view" class="container narrow" style="display:none">
+  <div class="card" style="margin-top:40px">
+    <h2>🪪 市场管理员登录</h2>
+    <label>账号</label><input id="account" value="admin">
+    <label>密码</label><input id="password" type="password" value="admin123">
+    <button class="btn block" style="margin-top:16px" onclick="login()">登 录</button>
+    <div style="text-align:center;margin-top:12px"><a href="/">← 返回平台首页</a></div>
+  </div>
+</div>
+
+<div id="app-view" style="display:none">
+  <div class="topbar">
+    <div class="brand"><span class="logo">🪪</span> 管理员巡检端</div>
+    <div><span class="who" id="who"></span><button onclick="logout()">退出</button></div>
+  </div>
+  <div class="container">
+    <div class="pill-tabs">
+      <button data-tab="dash" class="on" onclick="tab('dash')">监管看板</button>
+      <button data-tab="scan" onclick="tab('scan')">扫码巡检</button>
+      <button data-tab="stalls" onclick="tab('stalls')">摊位列表</button>
+    </div>
+    <div id="content"></div>
+  </div>
+</div>
+<video id="video" style="display:none" playsinline></video>
+<canvas id="scan-canvas"></canvas>
+<script src="/assets/common.js"></script>
+<script src="/assets/jsQR.js"></script>
+<script>
+let me = null, scanTimer = null, stream = null;
+
+async function init() {
+  if (!localStorage.getItem('mt_token')) return showLogin();
+  // 用管理员看板接口校验当前会话是否为管理员
+  try { await api('/api/admin/dashboard'); showApp(); }
+  catch { localStorage.removeItem('mt_token'); showLogin(); }
+}
+function showLogin() { document.getElementById('login-view').style.display = ''; }
+function showApp() {
+  document.getElementById('app-view').style.display = '';
+  const saved = JSON.parse(localStorage.getItem('mt_admin') || 'null');
+  document.getElementById('who').textContent = saved ? `${saved.name}（巡检）` : '市场管理员';
+  tab('dash');
+}
+async function login() {
+  try {
+    const r = await api('/api/login', { method: 'POST',
+      body: { role: 'admin', account: v('account'), password: v('password') } });
+    localStorage.setItem('mt_token', r.token);
+    localStorage.setItem('mt_admin', JSON.stringify(r.admin));
+    showApp();
+  } catch (e) { toast(e.message, true); }
+}
+function v(id) { return document.getElementById(id).value.trim(); }
+
+function tab(name) {
+  stopScan();
+  document.querySelectorAll('.pill-tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  if (name === 'dash') loadDash();
+  if (name === 'scan') renderScan();
+  if (name === 'stalls') loadStalls();
+}
+
+async function loadDash() {
+  const d = await api('/api/admin/dashboard');
+  const inspBadge = { pass: ['green', '合格'], rectify: ['amber', '限期整改'], fail: ['red', '不合格'] };
+  document.getElementById('content').innerHTML = `
+    <div class="card">
+      <h2>📈 今日监管概览</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="num">${d.stalls}</div><div class="lbl">在管摊位</div></div>
+        <div class="stat blue"><div class="num">${d.on_sale}</div><div class="lbl">在售批次</div></div>
+        <div class="stat amber"><div class="num">${d.near_expiry.length}</div><div class="lbl">临期预警</div></div>
+        <div class="stat red"><div class="num">${d.recalled}</div><div class="lbl">召回批次</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>⚠️ 临期预警（在售 · 2天内到期）</h2>
+      ${d.near_expiry.length ? d.near_expiry.map(b => `
+        <div class="item">
+          <div class="title">${esc(b.product_name)} <span class="badge ${EXP_BADGE[b.expiry_state] ? EXP_BADGE[b.expiry_state][0] : 'amber'}">${EXP_BADGE[b.expiry_state] ? EXP_BADGE[b.expiry_state][1] : '临期'}</span></div>
+          <div class="meta">${esc(b.stall_name)} · 溯源码 ${esc(b.trace_code)} · 保质期至 ${esc(b.best_before)}</div>
+          <div class="actions"><button class="btn sm amber" onclick="lookup('${b.trace_code}')">巡检核查</button></div>
+        </div>`).join('') : '<div class="empty">暂无临期风险，状态良好 👍</div>'}
+    </div>
+    <div class="card">
+      <h2>📝 最近巡检记录</h2>
+      ${d.recent_inspections.length ? d.recent_inspections.map(i => `
+        <div class="item">
+          <div class="title">${esc(i.stall_name)}（${esc(i.stall_code)}）<span class="badge ${inspBadge[i.result][0]}">${inspBadge[i.result][1]}</span></div>
+          <div class="meta">${esc(i.inspected_at)} · ${esc(i.admin_name)}${i.issue ? ' · 问题：' + esc(i.issue) : ''}${i.requirement ? ' · 要求：' + esc(i.requirement) : ''}</div>
+        </div>`).join('') : '<div class="empty">暂无巡检记录</div>'}
+    </div>`;
+}
+
+async function loadStalls() {
+  const q = arguments[0] || '';
+  const rows = await api('/api/admin/stalls?q=' + encodeURIComponent(q));
+  document.getElementById('content').innerHTML = `
+    <div class="card">
+      <h2>🏪 摊位列表（${rows.length}）</h2>
+      <div class="searchbar">
+        <input id="sq" placeholder="摊位名 / 编号 / 摊主姓名" value="${esc(q)}">
+        <button class="btn" onclick="loadStalls(document.getElementById('sq').value)">搜索</button>
+      </div>
+      <div style="margin-top:10px">
+      ${rows.map(s => `<div class="item">
+        <div class="title">${esc(s.name)} <span class="badge green">${esc(s.category)}</span></div>
+        <div class="meta">编号 ${esc(s.code)} · 摊主 ${esc(s.owner_name)} · 📞 ${esc(s.phone || '—')} · ${esc(s.location || '')}</div>
+        <div class="meta">营业执照/备案 ${esc(s.license_no || '—')} · 批次 ${s.batch_count} · 巡检 ${s.insp_count} 次</div>
+        <div class="actions"><button class="btn sm" onclick="inspectStall(${s.id}, '${esc(s.name)}')">登记巡检</button></div>
+      </div>`).join('')}
+      </div>
+    </div>`;
+  document.getElementById('sq').addEventListener('keydown', e => e.key === 'Enter' && loadStalls(e.target.value));
+}
+
+function renderScan() {
+  document.getElementById('content').innerHTML = `
+    <div class="card">
+      <h2>📷 扫描批次二维码</h2>
+      <div class="scan-region">
+        <video id="cam" playsinline style="width:100%;border-radius:12px;background:#000"></video>
+      </div>
+      <div id="scan-msg" class="scan-tip">点击下方按钮开启摄像头，对准价签/小票上的溯源二维码</div>
+      <div class="actions" style="justify-content:center">
+        <button class="btn" id="cam-btn" onclick="startCam()">开启摄像头扫码</button>
+        <button class="btn ghost" id="stop-btn" onclick="stopScan()" style="display:none">停止</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>⌨️ 无法扫码时手动输入</h2>
+      <div class="searchbar">
+        <input id="manual-code" placeholder="输入溯源码，如 PC20260930A001">
+        <button class="btn" onclick="lookup(document.getElementById('manual-code').value.trim())">查询</button>
+      </div>
+    </div>
+    <div id="trace-result"></div>`;
+}
+
+async function startCam() {
+  if (!window.jsQR) return toast('扫码库未加载', true);
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  } catch (e) {
+    document.getElementById('scan-msg').textContent = '无法开启摄像头：' + e.message + '。请使用 https/localhost 或改用手动输入。';
+    return;
+  }
+  const video = document.getElementById('cam');
+  video.srcObject = stream;
+  await video.play();
+  document.getElementById('cam-btn').style.display = 'none';
+  document.getElementById('stop-btn').style.display = '';
+  document.getElementById('scan-msg').textContent = '扫码中… 将二维码置于画面中央';
+  const canvas = document.getElementById('scan-canvas');
+  const ctx = canvas.getContext('2d');
+  scanTimer = setInterval(() => {
+    if (video.readyState !== video.HAVE_ENOUGH_DATA) return;
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
+    if (code && code.data) {
+      let url = code.data.trim();
+      const m = url.match(/\/t\/([A-Za-z0-9]+)/);
+      const tc = m ? m[1] : url;
+      stopScan();
+      toast('识别成功：' + tc);
+      lookup(tc);
+    }
+  }, 300);
+}
+function stopScan() {
+  if (scanTimer) clearInterval(scanTimer);
+  scanTimer = null;
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  const video = document.getElementById('cam');
+  if (video) video.srcObject = null;
+  const btn = document.getElementById('cam-btn'); if (btn) btn.style.display = '';
+  const sbtn = document.getElementById('stop-btn'); if (sbtn) sbtn.style.display = 'none';
+}
+
+async function lookup(traceCode) {
+  if (!traceCode) return toast('请输入溯源码', true);
+  let box = document.getElementById('trace-result');
+  if (!box) { tab('scan'); box = document.getElementById('trace-result'); }
+  box.innerHTML = '<div class="card"><div class="empty">正在查询完整链路…</div></div>';
+  try {
+    const d = await api('/api/admin/trace/' + encodeURIComponent(traceCode));
+    renderAdminTrace(d, box);
+  } catch (e) { box.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; }
+}
+
+function renderAdminTrace(d, box) {
+  const b = d.batch;
+  const sb = STATUS_BADGE[b.status];
+  const inspBadge = { pass: ['green', '合格'], rectify: ['amber', '限期整改'], fail: ['red', '不合格'] };
+  box.innerHTML = `
+    <div class="card">
+      <h2>🔎 完整溯源链路（管理视角）</h2>
+      <div style="margin:4px 0">
+        <span class="badge ${sb[0]}">${sb[1]}</span>
+        ${b.expiry_state ? `<span class="badge ${EXP_BADGE[b.expiry_state][0]}">${b.expiry_text}</span>` : ''}
+      </div>
+      <h3>批次信息</h3>
+      <dl class="kv">
+        <dt>溯源码</dt><dd>${esc(b.trace_code)}</dd>
+        <dt>商品</dt><dd>${esc(b.product_name)} ${b.variety ? '（' + esc(b.variety) + '）' : ''}</dd>
+        <dt>数量</dt><dd>进货 ${b.quantity} ${esc(b.unit)} · 当前剩余 <b>${b.remaining}</b> ${esc(b.unit)}</dd>
+        <dt>进货时间</dt><dd>${esc(b.purchase_time)}（到货 ${esc(b.arrival_time || '—')}）</dd>
+        <dt>保质期至</dt><dd>${esc(b.best_before || '未设置')}${b.expiry_text ? ' — <b style="color:var(--amber)">' + esc(b.expiry_text) + '</b>' : ''}</dd>
+        <dt>录入时间</dt><dd>${esc(b.created_at)}</dd>
+      </dl>
+      <h3>来源链条（从田间到摊位）</h3>
+      <div class="origin-flow">
+        <span class="node">${esc(b.origin_place)}</span><span class="arr">→</span>
+        <span class="node">${esc(ORIGIN_TEXT[b.origin_type])}</span><span class="arr">→</span>
+        <span class="node">${esc(d.stall.name)}</span>
+      </div>
+      <dl class="kv">
+        <dt>供货方</dt><dd>${esc(b.supplier || '—')} ${b.supplier_contact ? '（' + esc(b.supplier_contact) + '）' : ''}</dd>
+      </dl>
+    </div>
+
+    <div class="card">
+      <h3>🏪 摊位与经营主体</h3>
+      <dl class="kv">
+        <dt>摊位</dt><dd>${esc(d.stall.name)}（${esc(d.stall.code)} · ${esc(d.stall.category)}）</dd>
+        <dt>位置</dt><dd>${esc(d.stall.location || '—')}</dd>
+        <dt>摊主</dt><dd>${esc(d.stall.owner_name)} · 📞 ${esc(d.stall.phone || '—')}</dd>
+        <dt>证照</dt><dd>${esc(d.stall.license_no || '—')}</dd>
+        <dt>营业时间</dt><dd>${esc(d.stall.business_hours || '—')}</dd>
+      </dl>
+      <div class="actions"><button class="btn sm" onclick="inspectStall(${d.stall.id}, '${esc(d.stall.name)}')">📝 对该摊位登记巡检</button>
+      <a class="btn sm ghost" href="/t/${b.trace_code}" target="_blank">查看消费者公示页</a></div>
+    </div>
+
+    <div class="card">
+      <h3>🧪 检测记录（${d.detections.length}）</h3>
+      <div class="timeline">
+        ${d.detections.map(x => `<div class="tl-item ${x.result === 'fail' ? 'red' : ''}">
+          <div class="tl-time">${esc(x.tested_at)}</div>
+          <div class="tl-title">${esc(x.item)} <span class="badge ${RESULT_BADGE[x.result][0]}">${RESULT_BADGE[x.result][1]}</span></div>
+          <div class="tl-desc">${esc(x.tested_by)}${x.method ? ' · ' + esc(x.method) : ''}</div>
+        </div>`).join('') || '<div class="empty">暂无检测记录</div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📊 库存盘点流水（${d.logs.length}）</h3>
+      ${d.logs.map(l => `<div class="item" style="padding:8px 12px">
+        <div class="meta">${esc(l.logged_at)} · 剩余 <b>${l.remaining}</b> · 售出 ${l.sold} · 报损 ${l.discarded}${l.note ? ' · ' + esc(l.note) : ''}</div>
+      </div>`).join('') || '<div class="empty">暂无盘点记录</div>'}
+    </div>
+
+    <div class="card">
+      <h3>🏷️ 临期/处置记录（${d.handlings.length}）</h3>
+      <div class="timeline">
+        ${d.handlings.map(h => `<div class="tl-item ${h.type === 'recall' || h.type === 'destroy' ? 'red' : 'amber'}">
+          <div class="tl-time">${esc(h.handled_at)}</div>
+          <div class="tl-title">${esc(HANDLE_TEXT[h.type] || h.type)} · ${h.quantity} ${esc(b.unit)}</div>
+          ${h.note ? `<div class="tl-desc">${esc(h.note)}</div>` : ''}
+        </div>`).join('') || '<div class="empty">无临期处置记录</div>'}
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🧾 该摊位历史巡检（${d.stall_inspections.length}）</h3>
+      ${d.stall_inspections.map(i => `<div class="item" style="padding:8px 12px">
+        <div class="title" style="font-size:13.5px">${esc(i.admin_name)}（${esc(i.badge_no || '')}）
+          <span class="badge ${inspBadge[i.result][0]}">${inspBadge[i.result][1]}</span></div>
+        <div class="meta">${esc(i.inspected_at)}${i.issue ? ' · 问题：' + esc(i.issue) : ''}${i.requirement ? ' · 要求：' + esc(i.requirement) : ''}</div>
+      </div>`).join('') || '<div class="empty">暂无巡检记录</div>'}
+    </div>`;
+}
+
+async function inspectStall(stallId, stallName) {
+  let mask = document.getElementById('insp-mask');
+  if (!mask) { mask = document.createElement('div'); mask.id = 'insp-mask';
+    mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60;display:flex;align-items:center;justify-content:center;padding:16px';
+    document.body.appendChild(mask); }
+  mask.innerHTML = `<div class="card" style="max-width:440px;width:100%;margin:0;max-height:90vh;overflow:auto">
+    <h2>📝 巡检登记 · ${esc(stallName)}</h2>
+    <label>巡检结果</label>
+    <select id="r-result">
+      <option value="pass">检查合格</option>
+      <option value="rectify">限期整改</option>
+      <option value="fail">检查不合格（停业/查封）</option>
+    </select>
+    <label>发现问题</label><textarea id="r-issue" placeholder="如：农残超标 / 健康证过期 / 台账不全"></textarea>
+    <label>整改要求 / 处置意见</label><textarea id="r-req" placeholder="如：3日内提交整改报告，该供应商暂停入场"></textarea>
+    <div class="row2" style="margin-top:14px">
+      <button class="btn ghost" onclick="document.getElementById('insp-mask').style.display='none'">取消</button>
+      <button class="btn" onclick="submitInspect(${stallId})">提交巡检记录</button>
+    </div>
+  </div>`;
+  mask.style.display = 'flex';
+}
+async function submitInspect(stallId) {
+  try {
+    await api(`/api/admin/stall/${stallId}/inspect`, { method: 'POST', body: {
+      result: document.getElementById('r-result').value,
+      issue: document.getElementById('r-issue').value.trim(),
+      requirement: document.getElementById('r-req').value.trim()
+    }});
+    document.getElementById('insp-mask').style.display = 'none';
+    toast('巡检记录已提交');
+    loadDash();
+  } catch (e) { toast(e.message, true); }
+}
+
+window.addEventListener('beforeunload', stopScan);
+init();
+</script>
+</body>
+</html>

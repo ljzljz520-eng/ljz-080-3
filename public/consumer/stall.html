@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>摊位商品 · 放心菜场</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand"><span class="logo">🛒</span> 摊位在售商品</div>
+  <a href="/consumer/" style="color:#fff;font-size:12px">返回搜索</a>
+</div>
+<div class="container" id="app"><div class="empty">加载中…</div></div>
+<div class="footer-note">仅展示在售批次的来源与检测公示信息</div>
+<script src="/assets/common.js"></script>
+<script>
+(async () => {
+  const code = new URLSearchParams(location.search).get('code');
+  const app = document.getElementById('app');
+  try {
+    const d = await api('/api/public/stall/' + code);
+    const expBadge = e => e ? `<span class="badge ${EXP_BADGE[e][0]}">${EXP_BADGE[e][1]}</span>` : '';
+    app.innerHTML = `
+      <div class="card">
+        <h2>${esc(d.stall.name)} <span class="badge green">${esc(d.stall.category)}</span></h2>
+        <dl class="kv">
+          <dt>摊位编号</dt><dd>${esc(d.stall.code)}</dd>
+          <dt>摊位位置</dt><dd>${esc(d.stall.location || '—')}</dd>
+          <dt>营业时间</dt><dd>${esc(d.stall.business_hours || '—')}</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h2>🥬 今日在售商品（${d.products.length}）</h2>
+        ${d.products.length ? d.products.map(p => `
+          <div class="item">
+            <div class="title">${esc(p.product_name)} ${p.variety ? '<span class="badge gray">' + esc(p.variety) + '</span>' : ''} ${expBadge(p.expiry_state)}</div>
+            <div class="meta">进货时间：${esc(p.purchase_time)}${p.best_before ? '　保质期至：' + esc(p.best_before) : ''}</div>
+            <div class="actions"><a class="btn sm" href="/t/${p.trace_code}">查看完整溯源</a></div>
+          </div>`).join('') : '<div class="empty">当前没有公示中的在售商品</div>'}
+      </div>
+      <div class="safe-notice"><span>🔒</span><div>已售罄、召回、销毁或完成临期处理的批次不在此列表展示，避免误导消费。</div></div>`;
+  } catch (e) { app.innerHTML = '<div class="card"><div class="empty">' + esc(e.message) + '</div></div>'; }
+})();
+</script>
+</body>
+</html>

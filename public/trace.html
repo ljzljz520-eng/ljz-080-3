@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>商品溯源 · 放心菜场</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand"><span class="logo">🔖</span> 商品溯源信息 <span class="sub">消费者公示页</span></div>
+  <a href="/consumer/" style="color:#fff;font-size:12px">查其他摊位</a>
+</div>
+<div class="container narrow" id="app"><div class="empty">正在查询溯源信息…</div></div>
+<div class="footer-note">放心菜场 · 信息由摊主录入、市场快检室与管理员核验</div>
+<script src="/assets/common.js"></script>
+<script>
+(async () => {
+  const code = location.pathname.split('/').pop();
+  const app = document.getElementById('app');
+  try {
+    const d = await api('/api/public/trace/' + encodeURIComponent(code));
+    const resBadge = RESULT_BADGE[d.detection_summary] || ['gray', d.detection_summary];
+    const expBadge = d.expiry_state ? `<span class="badge ${EXP_BADGE[d.expiry_state][0]}">${d.expiry_text}</span>` : '';
+
+    app.innerHTML = `
+      <div class="card">
+        <h2>${esc(d.product_name)} ${d.variety ? '<span class="badge gray">' + esc(d.variety) + '</span>' : ''}</h2>
+        <div style="margin:6px 0">
+          <span class="badge ${resBadge[0]}">检测：${resBadge[1]}</span>
+          ${expBadge}
+          ${d.on_sale ? '<span class="badge green">在售中</span>' : '<span class="badge gray">' + esc(d.status_text) + '</span>'}
+        </div>
+        <div class="meta" style="font-size:12px;color:var(--muted);margin-top:6px">溯源码：${esc(d.trace_code)}</div>
+      </div>
+
+      <div class="card">
+        <h2>🏪 销售摊位</h2>
+        <dl class="kv">
+          <dt>摊位名称</dt><dd>${esc(d.stall.name)}（${esc(d.stall.category)}）</dd>
+          <dt>摊位位置</dt><dd>${esc(d.stall.location || '—')}</dd>
+          <dt>营业时间</dt><dd>${esc(d.stall.business_hours || '—')}</dd>
+        </dl>
+      </div>
+
+      <div class="card">
+        <h2>🌱 来源信息</h2>
+        <div class="origin-flow">
+          <span class="node">${esc(d.origin.place)}</span><span class="arr">→</span>
+          <span class="node">${esc(d.origin.type_text)}</span><span class="arr">→</span>
+          <span class="node">${esc(d.stall.name)}</span>
+        </div>
+        <dl class="kv">
+          <dt>产地/来源地</dt><dd>${esc(d.origin.place)}</dd>
+          <dt>进货方式</dt><dd>${esc(d.origin.type_text)}</dd>
+          <dt>进货时间</dt><dd>${esc(d.purchase_time)}</dd>
+          ${d.best_before ? `<dt>保质期至</dt><dd>${esc(d.best_before)}${d.expiry_text ? '（' + esc(d.expiry_text) + '）' : ''}</dd>` : ''}
+        </dl>
+      </div>
+
+      <div class="card">
+        <h2>🧪 检测结果公示（${d.detections.length}）</h2>
+        ${d.detections.length ? d.detections.map(x => `
+          <div class="item">
+            <div class="title">${esc(x.item)} <span class="badge ${RESULT_BADGE[x.result][0]}">${x.result_text}</span></div>
+            <div class="meta">检测人/机构：${esc(x.tested_by)}　时间：${esc(x.tested_at)}</div>
+            ${x.method ? '<div class="meta">检测方式：' + esc(x.method) + '</div>' : ''}
+          </div>`).join('') : '<div class="empty">该批次暂无检测记录</div>'}
+      </div>
+
+      <div class="card">
+        <h2>🏷️ 临期 / 处理记录（${d.handlings.length}）</h2>
+        ${d.handlings.length ? d.handlings.map(h => `
+          <div class="item">
+            <div class="title">${esc(HANDLE_TEXT[h.type] || h.type)} <span class="badge blue">${esc(h.quantity)} ${esc(h.unit)}</span></div>
+            <div class="meta">时间：${esc(h.handled_at)}</div>
+            ${h.note ? '<div class="meta">' + esc(h.note) + '</div>' : ''}
+          </div>`).join('') : '<div class="empty">无临期处理记录，商品在正常销售周期内</div>'}
+      </div>
+
+      <div class="safe-notice">
+        <span>🔒</span>
+        <div>本页为面向消费者的公示信息。摊主联系电话、供应商联系方式、库存盘点流水、巡检整改等市场内部管理信息不在此公开。</div>
+      </div>`;
+  } catch (e) {
+    app.innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div>
+      <div style="text-align:center"><a class="btn ghost" href="/consumer/">返回消费者首页</a></div></div>`;
+  }
+})();
+</script>
+</body>
+</html>

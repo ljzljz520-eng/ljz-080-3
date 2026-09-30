@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>放心菜场 · 摊位溯源平台</title>
+<link rel="stylesheet" href="/assets/style.css">
+</head>
+<body>
+<div class="hero">
+  <h1>🥬 放心菜场 · 摊位溯源平台</h1>
+  <p>进货有登记、检测有记录、临期有处理、巡检有痕迹。<br>扫一扫批次二维码，这批菜从田间到摊位，全程可查。</p>
+</div>
+<div class="container">
+  <div class="entry-grid">
+    <a class="entry" href="/consumer/">
+      <div class="icon">🛒</div>
+      <div class="t">消费者查溯源</div>
+      <div class="d">搜摊位 / 扫二维码<br>查询商品来源与检测结果</div>
+    </a>
+    <a class="entry" href="/vendor/">
+      <div class="icon">🧑‍🌾</div>
+      <div class="t">摊主工作台</div>
+      <div class="d">录入进货批次、检测结果<br>每日盘点库存与临期处理</div>
+    </a>
+    <a class="entry" href="/admin/">
+      <div class="icon">🪪</div>
+      <div class="t">管理员巡检</div>
+      <div class="d">扫码查看完整链路<br>登记巡检与整改要求</div>
+    </a>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h2>🔄 平台数据闭环</h2>
+    <div class="origin-flow">
+      <span class="node">产地/供应商</span><span class="arr">→</span>
+      <span class="node">进货批次登记</span><span class="arr">→</span>
+      <span class="node">快检结果录入</span><span class="arr">→</span>
+      <span class="node">每日库存盘点</span><span class="arr">→</span>
+      <span class="node">临期处理/巡检</span><span class="arr">→</span>
+      <span class="node">消费者扫码可查</span>
+    </div>
+  </div>
+
+  <div class="card demo-accounts">
+    <h2>🔑 演示账号</h2>
+    <p>摊主端：摊位号 <code>S001</code> ~ <code>S005</code>，密码 <code>123456</code></p>
+    <p style="margin-top:6px">管理员：账号 <code>admin</code>，密码 <code>admin123</code></p>
+    <p style="margin-top:6px">消费者端无需登录。示例溯源码：<code>PC20260930A001</code></p>
+    <p style="margin-top:10px;color:var(--muted);font-size:12px">说明：本演示系统使用明文密码仅为方便体验；生产环境应使用加盐哈希与 HTTPS。消费者端公开接口仅返回来源、检测公示等安全字段，不暴露摊主联系人、进货价格、库存流水等后台信息。</p>
+  </div>
+</div>
+<div class="footer-note">放心菜场溯源平台 · 演示系统 · 数据存储于本地 SQLite</div>
+</body>
+</html>
