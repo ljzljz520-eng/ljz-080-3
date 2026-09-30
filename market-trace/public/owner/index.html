@@ -1,0 +1,51 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>摊主工作台 · 溯源平台</title><link rel="stylesheet" href="/css/style.css"></head><body>
+<header class="top"><div class="wrap">
+  <div class="logo">🧺 摊主工作台<small id="stallInfo"></small></div>
+  <nav>
+    <a href="#" class="on" data-tab="batches">进货批次</a>
+    <a href="#" data-tab="inventory">库存登记</a>
+    <a href="#" data-tab="archive">商品/供应商</a>
+    <a href="#" id="logout">退出</a>
+  </nav>
+</div></header>
+<main class="wrap">
+  <div class="grid g3" id="stats"></div>
+  <div class="card" id="batchesTab">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <h2 style="margin:0">进货批次台账</h2>
+      <button class="btn sm" style="margin-left:auto" id="addBatchBtn">＋ 录入进货批次</button>
+    </div>
+    <div class="tabs" style="margin-top:12px" id="filters">
+      <button class="on" data-f="">全部</button><button data-f="fresh">新鲜在售</button>
+      <button data-f="near_expiry">临期预警</button><button data-f="expired">已过期</button>
+      <button data-f="disposed">已处置/下架</button>
+    </div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>批次号</th><th>商品</th><th>供应商/产地</th><th>进货日</th><th>到期日</th><th>剩余/进货</th><th>检测</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody id="batchRows"></tbody>
+    </table></div>
+  </div>
+  <div class="card" id="inventoryTab" style="display:none">
+    <h2>库存快速登记</h2>
+    <p class="muted">选择批次，登记今日销售、盘点损耗或临期折扣，系统自动更新剩余库存。</p>
+    <div class="tbl-wrap" style="margin-top:10px"><table>
+      <thead><tr><th>批次号</th><th>商品</th><th>剩余库存</th><th>状态</th><th>登记</th></tr></thead>
+      <tbody id="invRows"></tbody>
+    </table></div>
+  </div>
+  <div class="card" id="archiveTab" style="display:none">
+    <div class="grid g2">
+      <div><h2>商品档案 <button class="btn sm" style="float:right" onclick="productForm()">＋ 新增</button></h2>
+        <div class="tbl-wrap"><table><thead><tr><th>商品</th><th>类别</th><th>单位</th><th>保质期(天)</th><th>临期阈值</th></tr></thead><tbody id="prodRows"></tbody></table></div>
+      </div>
+      <div><h2>供应商/产地 <button class="btn sm" style="float:right" onclick="supplierForm()">＋ 新增</button></h2>
+        <div class="tbl-wrap"><table><thead><tr><th>名称</th><th>产地</th><th>联系人</th></tr></thead><tbody id="supRows"></tbody></table></div>
+      </div>
+    </div>
+  </div>
+</main>
+<script src="/js/common.js"></script>
+<script src="/owner/app.js"></script>
+</body></html>

@@ -1,0 +1,57 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>巡检工作台 · 溯源平台</title><link rel="stylesheet" href="/css/style.css"></head><body>
+<header class="top"><div class="wrap">
+  <div class="logo">🛡️ 市场巡检工作台<small id="who"></small></div>
+  <nav>
+    <a href="#" class="on" data-tab="dash">巡检看板</a>
+    <a href="#" data-tab="batches">全市场批次</a>
+    <a href="#" data-tab="disposals">处置核验</a>
+    <a href="#" data-tab="stalls">摊位名册</a>
+    <a href="#" id="logout">退出</a>
+  </nav>
+</div></header>
+<main class="wrap">
+  <div id="dashTab">
+    <div class="grid g3" id="stats"></div>
+    <div class="card">
+      <h2>快速巡检</h2>
+      <p class="muted">巡检时扫描摊位批次二维码，可直接查看该批菜的来源、检测记录与处置情况，并录入抽检/巡检结果。</p>
+      <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn" id="scanBtn">📷 扫码巡检</button>
+        <input id="manualCode" placeholder="或输入批次号，如 PC20260930-001" style="max-width:300px">
+        <button class="btn ghost" id="manualBtn">查询批次</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>临期 / 过期预警</h2>
+      <div class="tbl-wrap"><table><thead><tr><th>到期日</th><th>批次号</th><th>商品</th><th>摊位</th><th>剩余</th><th>检测</th><th>状态</th><th></th></tr></thead><tbody id="alertRows"></tbody></table></div>
+    </div>
+    <div class="card">
+      <h2>近期巡检记录</h2>
+      <div class="tbl-wrap"><table><thead><tr><th>日期</th><th>摊位</th><th>批次/商品</th><th>结果</th><th>情况</th><th>处理</th></tr></thead><tbody id="patrolRows"></tbody></table></div>
+    </div>
+  </div>
+  <div class="card" id="batchesTab" style="display:none">
+    <h2>全市场批次</h2>
+    <div class="searchbar" style="margin:0 0 12px">
+      <input id="kw" placeholder="搜索批次号 / 商品 / 摊位名 / 摊位号">
+      <select id="fStatus" style="max-width:150px"><option value="">全部状态</option><option value="fresh">新鲜在售</option><option value="near_expiry">临期</option><option value="expired">已过期</option><option value="disposed">已处置</option><option value="sold_out">已售罄</option><option value="fail">检测不合格</option></select>
+      <button class="btn" id="searchBtn">查询</button>
+    </div>
+    <div class="tbl-wrap"><table><thead><tr><th>批次号</th><th>商品</th><th>摊位</th><th>供应商</th><th>进货日</th><th>到期日</th><th>剩余</th><th>检测</th><th>状态</th><th></th></tr></thead><tbody id="batchRows"></tbody></table></div>
+  </div>
+  <div class="card" id="disposalsTab" style="display:none">
+    <h2>摊主处置核验</h2>
+    <div class="tabs"><button class="on" id="allDisp">全部</button><button id="pendDisp">待确认</button></div>
+    <div class="tbl-wrap"><table><thead><tr><th>日期</th><th>摊位</th><th>批次/商品</th><th>方式</th><th>数量</th><th>原因</th><th>摊主</th><th>状态</th><th></th></tr></thead><tbody id="dispRows"></tbody></table></div>
+  </div>
+  <div class="card" id="stallsTab" style="display:none">
+    <h2>摊位名册</h2>
+    <div class="tbl-wrap"><table><thead><tr><th>摊位号</th><th>名称</th><th>类别</th><th>负责人</th><th>电话</th><th>营业执照</th><th>状态</th></tr></thead><tbody id="stallRows"></tbody></table></div>
+  </div>
+</main>
+<script src="/vendor/jsQR.js"></script>
+<script src="/js/common.js"></script>
+<script src="/admin/app.js"></script>
+</body></html>

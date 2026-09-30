@@ -1,0 +1,34 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>摊位商品溯源</title><link rel="stylesheet" href="/css/style.css"></head><body>
+<header class="top"><div class="wrap">
+  <div class="logo">🥬 菜篮子溯源<small id="sub">摊位在售商品</small></div>
+  <nav><a href="/index.html" class="on">返回首页</a></nav>
+</div></header>
+<main class="wrap">
+  <div class="card" id="head"><div class="empty">加载中…</div></div>
+  <div class="card">
+    <h2>在售商品批次（来源与检测公示）</h2>
+    <div class="grid g2" id="list"></div>
+  </div>
+</main>
+<script src="/js/common.js"></script>
+<script>
+const id = new URLSearchParams(location.search).get('id');
+async function load() {
+  const d = await api('/api/public/stalls/' + id + '/batches');
+  document.title = d.stall.name + ' · 溯源';
+  $('#sub').textContent = d.stall.stallNo + ' ' + d.stall.name;
+  $('#head').innerHTML = '<h2 style="border:none;margin:0">' + esc(d.stall.name) + '</h2>'
+    + '<p class="muted">摊位号：' + esc(d.stall.stallNo) + ' ｜ 经营类别：' + esc(d.stall.category) + '</p>';
+  $('#list').innerHTML = d.batches.length ? d.batches.map(b =>
+    '<div class="stall" onclick="location.href=\'/trace.html?c=' + encodeURIComponent(b.code) + '\'">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center"><b>' + esc(b.productName) + '</b>'
+    + '<span class="tag ' + (b.inspection.result === 'pass' ? 'green' : 'amber') + '">' + esc(b.inspection.resultText) + '</span></div>'
+    + '<div class="no" style="margin-top:6px">产地：' + esc(b.origin || '—') + '</div>'
+    + '<div class="no">供应商：' + esc(b.supplierName) + '</div>'
+    + '<div class="no">进货日期：' + esc(b.purchaseDate) + ' ｜ 保质期至：' + esc(b.expiryDate) + '</div></div>'
+  ).join('') : '<div class="empty">该摊位当前没有公示的在售批次</div>';
+}
+load().catch(e => { $('#head').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+</script></body></html>

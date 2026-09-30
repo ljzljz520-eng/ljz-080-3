@@ -1,0 +1,26 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>管理员登录 · 溯源平台</title><link rel="stylesheet" href="/css/style.css"></head><body>
+<header class="top"><div class="wrap"><div class="logo">🛡️ 溯源平台 · 市场管理端</div>
+<nav><a href="/index.html">消费者查询</a></nav></div></header>
+<main class="wrap">
+  <div class="card login-box">
+    <h2>市场管理员登录</h2>
+    <label>用户名</label><input id="u" value="admin">
+    <label>密码</label><input id="p" type="password" value="admin123">
+    <button class="btn" style="width:100%;margin-top:16px" id="btn">登 录</button>
+    <p class="muted" style="margin-top:12px;text-align:center">演示账号：admin / admin123</p>
+  </div>
+</main>
+<script src="/js/common.js"></script>
+<script>
+$('#btn').onclick = async () => {
+  try {
+    const d = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username: $('#u').value, password: $('#p').value }) });
+    if (d.user.role !== 'admin') return toast('该账号不是管理员账号', true);
+    localStorage.setItem('mt_token', d.token);
+    location.href = 'index.html';
+  } catch (e) { toast(e.message, true); }
+};
+$('#p').addEventListener('keydown', e => { if (e.key === 'Enter') $('#btn').click(); });
+</script></body></html>

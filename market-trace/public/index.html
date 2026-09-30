@@ -1,0 +1,50 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>菜篮子溯源 · 菜市场摊位溯源平台</title>
+<link rel="stylesheet" href="/css/style.css"></head><body>
+<header class="top"><div class="wrap">
+  <div class="logo">🥬 菜篮子溯源<small>扫码看来源 · 吃得更放心</small></div>
+  <nav><a href="/index.html" class="on">消费者查询</a><a href="/owner/login.html">摊主入口</a><a href="/admin/login.html">管理员入口</a></nav>
+</div></header>
+<main class="wrap">
+  <div class="hero">
+    <h1>查摊位、看来源、验检测</h1>
+    <p>选择市场内摊位，即可查看在售商品的产地来源、供应商与快检公示结果。扫描摊位批次二维码可直达该批蔬菜的完整溯源信息。</p>
+    <div class="searchbar">
+      <input id="kw" placeholder="搜索商品名称，如：西红柿、基围虾">
+      <button class="btn" id="searchBtn">搜索</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>市场摊位</h2>
+    <div class="grid g3" id="stallList"><div class="empty">加载中…</div></div>
+  </div>
+  <div class="card" id="searchCard" style="display:none">
+    <h2>搜索结果 <button class="btn sm gray" style="margin-left:auto" onclick="$('#searchCard').style.display='none'">清除</button></h2>
+    <div class="grid g2" id="searchList"></div>
+  </div>
+  <p class="footer">本页仅公示消费者所需的溯源信息，不涉及摊主经营后台数据。</p>
+</main>
+<script src="/js/common.js"></script>
+<script>
+async function loadStalls() {
+  const stalls = await api('/api/public/stalls');
+  $('#stallList').innerHTML = stalls.map(s =>
+    '<div class="stall" onclick="location.href=\'/stall.html?id=' + s.id + '\'"><b>' + esc(s.name) + '</b><div class="no">摊位号 ' + esc(s.stallNo) + '</div><span class="tag green" style="margin-top:8px">' + esc(s.category || '') + '</span></div>'
+  ).join('');
+}
+async function doSearch() {
+  const q = $('#kw').value.trim();
+  if (!q) return;
+  const rows = await api('/api/public/search?q=' + encodeURIComponent(q));
+  $('#searchCard').style.display = '';
+  $('#searchList').innerHTML = rows.length ? rows.map(r =>
+    '<div class="stall" onclick="location.href=\'/trace.html?c=' + encodeURIComponent(r.code) + '\'"><b>' + esc(r.productName) + '</b>'
+    + '<div class="no">' + esc(r.stallName) + '（' + esc(r.stallNo) + '）</div>'
+    + '<div style="margin-top:6px"><span class="pill">产地：' + esc(r.origin || '—') + '</span><span class="pill">检测：' + esc(r.inspection.resultText) + '</span></div></div>'
+  ).join('') : '<div class="empty">未找到在售的相关商品</div>';
+}
+$('#searchBtn').onclick = doSearch;
+$('#kw').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+loadStalls().catch(e => toast(e.message, true));
+</script></body></html>

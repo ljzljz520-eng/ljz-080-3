@@ -1,0 +1,69 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>商品溯源信息</title><link rel="stylesheet" href="/css/style.css"></head><body>
+<header class="top"><div class="wrap">
+  <div class="logo">🥬 菜篮子溯源<small id="sub">批次溯源结果</small></div>
+  <nav><a href="/index.html" class="on">返回首页</a></nav>
+</div></header>
+<main class="wrap" id="box"><div class="card"><div class="empty">正在查询溯源信息…</div></div></main>
+<script src="/js/common.js"></script>
+<script>
+// 支持两种参数：?c=批次号；扫码后若得到完整链接也自动提取
+let code = new URLSearchParams(location.search).get('c') || '';
+const m = code.match(/[?&]c=([^&]+)/i);
+if (m) code = decodeURIComponent(m[1]);
+code = code.toUpperCase();
+
+async function load() {
+  let b;
+  try { b = await api('/api/public/batch/' + encodeURIComponent(code)); }
+  catch (e) { $('#box').innerHTML = '<div class="card"><div class="empty">❌ ' + esc(e.message) + '<br><br><a class="btn ghost" href="/index.html">返回首页查询</a></div></div>'; return; }
+  document.title = b.productName + ' · 溯源';
+  const inspOk = b.inspection.result === 'pass';
+  const inspCls = inspOk ? '' : (b.inspection.result === 'fail' ? 'bad' : 'warn');
+  const html = `
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
+      <div><h2 style="border:none;margin:0">${esc(b.productName)} <span class="tag green">${esc(b.publicStatus)}</span></h2>
+      <p class="muted" style="margin-top:6px">批次号 ${esc(b.code)}</p></div>
+      <span class="tag ${inspOk ? 'green' : 'amber'}" style="font-size:14px;padding:6px 14px">检测：${esc(b.inspection.resultText)}</span>
+    </div>
+    <dl class="kv" style="margin-top:14px">
+      <dt>购买摊位</dt><dd>${esc(b.stallName)}（摊位号 ${esc(b.stallNo)}）</dd>
+      <dt>商品产地</dt><dd>${esc(b.origin || '—')}</dd>
+      <dt>供货单位</dt><dd>${esc(b.supplierName)}</dd>
+      <dt>进货日期</dt><dd>${esc(b.purchaseDate)}</dd>
+      <dt>生产日期</dt><dd>${esc(b.productionDate)}</dd>
+      <dt>保质期至</dt><dd>${esc(b.expiryDate)}（保质期 ${esc(b.shelfLifeDays)} 天）</dd>
+    </dl>
+  </div>
+  <div class="card">
+    <h2>从田间到菜篮 · 溯源轨迹</h2>
+    <div class="timeline">
+      <div class="tl-item">
+        <div class="d">${esc(b.productionDate)}</div>
+        <h4>① 产地采收</h4>
+        <p>${esc(b.origin || '产地信息待补充')}，由「${esc(b.supplierName)}」供货</p>
+      </div>
+      <div class="tl-item">
+        <div class="d">${esc(b.purchaseDate)}</div>
+        <h4>② 摊主进货验收</h4>
+        <p>${esc(b.stallName)} 于 ${esc(b.purchaseDate)} 进货，按批次登记台账</p>
+      </div>
+      <div class="tl-item ${inspCls}">
+        <div class="d">${esc(b.inspection.date || '')}</div>
+        <h4>③ 质量检测 · ${esc(b.inspection.resultText)}</h4>
+        <p>${inspOk ? esc(b.inspection.items || '快检项目合格') : esc(b.inspection.resultText === '检测结果待公示' ? '本批次检测结果尚在公示中，请以摊位纸质公示为准' : ('检测情况：' + b.inspection.items))}${b.inspection.inspector ? '<br>检测人：' + esc(b.inspection.inspector) : ''}</p>
+      </div>
+      <div class="tl-item">
+        <div class="d">${esc(b.purchaseDate)} 起</div>
+        <h4>④ 市场销售</h4>
+        <p>${b.disposal ? '该批次已按市场规定进行「' + esc(b.disposal.method) + '」（' + esc(b.disposal.date) + '），不再销售' : '该批次正在 ' + esc(b.stallName) + ' 销售，欢迎选购'}</p>
+      </div>
+    </div>
+  </div>
+  <p class="footer">以上信息由市场溯源系统自动公示，仅展示消费参考信息，不含摊主经营数据。</p>`;
+  $('#box').innerHTML = html;
+}
+if (code) load(); else $('#box').innerHTML = '<div class="card"><div class="empty">缺少批次信息<br><br><a class="btn" href="/index.html">去查询</a></div></div>';
+</script></body></html>

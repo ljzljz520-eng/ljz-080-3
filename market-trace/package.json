@@ -1,0 +1,16 @@
+{
+  "name": "market-trace",
+  "version": "1.0.0",
+  "description": "菜市场摊位溯源平台",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "seed": "node server/seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "qrcode": "^1.5.4"
+  }
+}
